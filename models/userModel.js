@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
+const bcrypt = require("bcrypt");
 
 const UserSchema = new mongoose.Schema({
   name: {
@@ -9,7 +10,7 @@ const UserSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    unique: true,
+    unique: [true, "Bu email adresin alınmıştır"],
     validate: [validator.isEmail, "Lütfen geçerli bir email adresi giriniz"],
     required: [true, "Lütfen emailinizi yazınız"],
   },
@@ -30,6 +31,11 @@ const UserSchema = new mongoose.Schema({
     required: [true, "Lütfen şifrenizi yazınız"],
     select: false,
   },
+  role: {
+    type: String,
+    enum: ["admin", "user"],
+    default: "user",
+  },
   registerDate: {
     type: Date,
     default: Date.now(),
@@ -38,6 +44,14 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+});
+
+UserSchema.pre("save", async function (next) {
+  if (this.isModified("password") || this.isNew) {
+    this.password = await bcrypt.hash(this.password, 12);
+    this.passwordConfirm = undefined;
+  }
+  next();
 });
 
 const User = mongoose.model("User", UserSchema);
