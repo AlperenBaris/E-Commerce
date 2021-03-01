@@ -1,23 +1,24 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
 const bcrypt = require("bcrypt");
+const catchAsync = require("./../utils/catchAsync");
 
 const UserSchema = new mongoose.Schema({
   name: {
     type: String,
     trim: true,
-    required: [true, "Lütfen isminizi yazınız"],
+    required: true,
   },
   email: {
     type: String,
     unique: [true, "Bu email adresin alınmıştır"],
     validate: [validator.isEmail, "Lütfen geçerli bir email adresi giriniz"],
-    required: [true, "Lütfen emailinizi yazınız"],
+    required: true,
   },
   password: {
     type: String,
     min: [5, "Şifrenizi en az 5 karakterden oluşturun"],
-    required: [true, "Lütfen şifrenizi yazınız"],
+    required: true,
     select: false,
   },
   passwordConfirm: {
@@ -28,7 +29,7 @@ const UserSchema = new mongoose.Schema({
       },
       message: "Şifreleriniz birbiri ile uyuşmuyor",
     },
-    required: [true, "Lütfen şifrenizi yazınız"],
+    required: true,
     select: false,
   },
   role: {
@@ -46,20 +47,23 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
-UserSchema.pre("save", async function (next) {
-  if (this.isModified("password") || this.isNew) {
-    this.password = await bcrypt.hash(this.password, 12);
-    this.passwordConfirm = undefined;
-  }
-  next();
-});
+UserSchema.pre(
+  "save",
+  catchAsync(async function (next) {
+    if (this.isModified("password") || this.isNew) {
+      this.password = await bcrypt.hash(this.password, 12);
+      this.passwordConfirm = undefined;
+    }
+    next();
+  })
+);
 
-UserSchema.methods.comparePassword = async function (
+UserSchema.methods.comparePassword = catchAsync(async function (
   candidatePassword,
   userPassword
 ) {
   return await bcrypt.compare(candidatePassword, userPassword);
-};
+});
 
 const User = mongoose.model("User", UserSchema);
 
