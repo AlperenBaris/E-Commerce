@@ -1,7 +1,7 @@
 const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 const catchAsync = require("./../utils/catchAsync");
-const { Error } = require("mongoose");
+const AppError = require("./../utils/AppError");
 
 const createSendToken = (user, statusCode, res) => {
   const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -31,11 +31,17 @@ const createSendToken = (user, statusCode, res) => {
 };
 
 exports.signup = catchAsync(async (req, res, next) => {
+  const { name, email, password, passwordConfirm } = req.body;
+
+  // CHECK INPUT FIELDS
+  if (!name || !email || !password | !passwordConfirm)
+    return next(new AppError("Lütfen gerekli alanları doldurunuz."));
+
   const user = await User.create({
-    name: req.body.name,
-    email: req.body.email,
-    password: req.body.password,
-    passwordConfirm: req.body.passwordConfirm,
+    name,
+    email,
+    password,
+    passwordConfirm,
   });
 
   createSendToken(user, 201, res);
@@ -46,14 +52,16 @@ exports.login = catchAsync(async (req, res, next) => {
 
   // Check password and email
   if (!email || !password) {
-    return next(Error("Lütfen şifrenizi ve emailinizi giriniz."));
+    return next(new AppError("Lütfen şifrenizi ve emailinizi giriniz.", 404));
   }
 
   const user = await User.findOne({ email }).select("+password");
 
   // Check user and corect password
   if (!user || !(await user.comparePassword(password, user.password))) {
-    return next("Lütfen şifrenizi veya emailinizi doğru yazınız.");
+    return next(
+      new AppError("Lütfen şifrenizi veya emailinizi doğru yazınız.", 404)
+    );
   }
 
   createSendToken(user, 200, res);
