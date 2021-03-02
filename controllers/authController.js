@@ -35,7 +35,11 @@ exports.signup = catchAsync(async (req, res, next) => {
 
   // CHECK INPUT FIELDS
   if (!name || !email || !password | !passwordConfirm)
-    return next(new AppError("Lütfen gerekli alanları doldurunuz."));
+    return next(new AppError("Lütfen gerekli alanları doldurunuz.", 404));
+
+  if (password.length < 5) {
+    return next(new AppError("Şifreniz en az 5 karakterli yapınız", 404));
+  }
 
   const user = await User.create({
     name,
