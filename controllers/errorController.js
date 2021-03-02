@@ -1,3 +1,5 @@
+const AppError = require("../utils/AppError");
+
 sendErrorDev = (err, res) => {
   res.status(err.statusCode).json({
     status: err.status,
@@ -8,14 +10,28 @@ sendErrorDev = (err, res) => {
 };
 
 sendErrorProd = (err, res) => {
-  res.status(err.statusCode).json({
-    status: err.status,
-    message: err.message,
-  });
+  if (err.isOperational) {
+    res.status(err.statusCode).json({
+      status: err.status,
+      message: err.message,
+    });
+  } else {
+    res.status(500).json({
+      status: err.status,
+      message: "Serverda sıkntı var",
+    });
+  }
+};
+
+handleDuplicateKeyError = (err, res) => {
+  return new AppError("Bu email adresi alınmıştır", 404);
 };
 
 handleValidationError = (err, res) => {
-  return;
+  const errors = Object.values(err.errors).map((el) => el.message);
+
+  const message = `${errors.join(". ")}`;
+  return new AppError(message, 400);
 };
 
 module.exports = (err, req, res, next) => {
@@ -25,8 +41,8 @@ module.exports = (err, req, res, next) => {
   if (process.env.NODE_ENV === "development") {
     sendErrorDev(err, res);
   } else if (process.env.NODE_ENV === "production") {
-    if (err.name === "ValidationError") error = handleValidationError(err, res);
-
+    if (err.code === 11000) err = handleDuplicateKeyError(err, res);
+    if (err.name === "ValidationError") err = handleValidationError(err, res);
     sendErrorProd(err, res);
   }
 };
