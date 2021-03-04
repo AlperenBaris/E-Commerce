@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
 const bcrypt = require("bcrypt");
+const Email = require("./../utils/Email");
 
 const UserSchema = new mongoose.Schema({
   name: {
@@ -40,9 +41,10 @@ const UserSchema = new mongoose.Schema({
     default: Date.now(),
   },
   activated: {
-    type: Boolean,
-    default: false,
+    type: String,
+    default: "notVerified",
   },
+  emailToken: String,
 });
 
 UserSchema.pre("save", async function (next) {
@@ -50,6 +52,13 @@ UserSchema.pre("save", async function (next) {
     this.password = await bcrypt.hash(this.password, 12);
     this.passwordConfirm = undefined;
   }
+  next();
+});
+
+UserSchema.post("save", async function (doc, next) {
+  const html = `<a href="http://localhost:3000/api/v1/user/verify/${doc.emailToken}">http://localhost:3000/api/v1/user/verify/${doc.emailToken}</a>`;
+  const mailer = new Email(doc);
+  await mailer.send("Doğrulama", html);
   next();
 });
 

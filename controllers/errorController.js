@@ -18,7 +18,7 @@ sendErrorProd = (err, res) => {
   } else {
     res.status(500).json({
       status: err.status,
-      message: "Serverda sıkntı var",
+      message: "Serverda sıkıntı var",
     });
   }
 };
