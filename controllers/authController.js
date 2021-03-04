@@ -2,6 +2,7 @@ const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 const catchAsync = require("./../utils/catchAsync");
 const AppError = require("./../utils/AppError");
+const uuid = require("uuid");
 
 const createSendToken = (user, statusCode, res) => {
   const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -41,11 +42,14 @@ exports.signup = catchAsync(async (req, res, next) => {
     return next(new AppError("Şifreniz en az 5 karakterli yapınız", 404));
   }
 
+  const emailToken = uuid.v4();
+
   const user = await User.create({
     name,
     email,
     password,
     passwordConfirm,
+    emailToken,
   });
 
   createSendToken(user, 201, res);
@@ -69,4 +73,27 @@ exports.login = catchAsync(async (req, res, next) => {
   }
 
   createSendToken(user, 200, res);
+});
+
+exports.verification = catchAsync(async (req, res, next) => {
+  const user = await User.findOneAndUpdate(
+    { emailToken: req.params.emailToken },
+    { $set: { activated: "verified" }, $unset: { emailToken: null } }
+  );
+
+  if (!user || user.activated === "verified") {
+    return next(
+      new AppError(
+        "Email önceden doğrulanmış veya yanlış bir linke girdiniz.",
+        404
+      )
+    );
+  }
+
+  res.status(200).json({
+    status: "success",
+    data: {
+      user,
+    },
+  });
 });
