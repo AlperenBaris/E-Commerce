@@ -2,6 +2,7 @@ const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 const catchAsync = require("./../utils/catchAsync");
 const AppError = require("./../utils/AppError");
+const Email = require("./../utils/Email");
 const uuid = require("uuid");
 
 const createSendToken = (user, statusCode, res) => {
@@ -31,13 +32,34 @@ const createSendToken = (user, statusCode, res) => {
   });
 };
 
+const findUser = async (req, res, next) => {
+  const { email, password } = req.body;
+
+  // Check password and email
+  if (!email || !password) {
+    return next(new AppError("Lütfen şifrenizi veya emailinizi giriniz.", 404));
+  }
+
+  const user = await User.findOne({ email }).select("+password");
+
+  // Check user and corect password
+  if (!user || !(await user.comparePassword(password, user.password))) {
+    return next(
+      new AppError("Lütfen şifrenizi veya emailinizi doğru yazınız.", 404)
+    );
+  }
+
+  return user;
+};
+
 exports.signup = catchAsync(async (req, res, next) => {
   const { name, email, password, passwordConfirm } = req.body;
 
-  // CHECK INPUT FIELDS
+  // Check input fields
   if (!name || !email || !password | !passwordConfirm)
     return next(new AppError("Lütfen gerekli alanları doldurunuz.", 404));
 
+  // Check password length
   if (password.length < 5) {
     return next(new AppError("Şifreniz en az 5 karakterli yapınız", 404));
   }
@@ -56,30 +78,17 @@ exports.signup = catchAsync(async (req, res, next) => {
 });
 
 exports.login = catchAsync(async (req, res, next) => {
-  const { email, password } = req.body;
+  const user = await findUser(req, res, next);
 
-  // Check password and email
-  if (!email || !password) {
-    return next(new AppError("Lütfen şifrenizi ve emailinizi giriniz.", 404));
+  if (user.activated === "verified") {
+    createSendToken(user, 200, res);
+  } else {
+    return next(new AppError("Lütfen hesabınızı doğrulayınız", 404));
   }
-
-  const user = await User.findOne({ email }).select("+password");
-
-  // Check user and corect password
-  if (!user || !(await user.comparePassword(password, user.password))) {
-    return next(
-      new AppError("Lütfen şifrenizi veya emailinizi doğru yazınız.", 404)
-    );
-  }
-
-  createSendToken(user, 200, res);
 });
 
 exports.verification = catchAsync(async (req, res, next) => {
-  const user = await User.findOneAndUpdate(
-    { emailToken: req.params.emailToken },
-    { $set: { activated: "verified" }, $unset: { emailToken: null } }
-  );
+  const user = await User.findOne({ emailToken: req.params.emailToken });
 
   if (!user || user.activated === "verified") {
     return next(
@@ -90,7 +99,56 @@ exports.verification = catchAsync(async (req, res, next) => {
     );
   }
 
+  await user.updateOne({
+    $set: { activated: "verified" },
+    $unset: { emailToken: "" },
+  });
+
+  await user.save();
+
   res.status(200).json({
+    status: "success",
+    data: {
+      user,
+    },
+  });
+});
+
+exports.sendResetEmail = catchAsync(async (req, res, next) => {
+  const user = await findUser(req, res, next);
+  const mailer = new Email(user);
+  const resetToken = user._id + Date.now();
+
+  const html = `<a href="http://localhost:3000/api/v1/user/resetPassword/${resetToken}">http://localhost:3000/api/v1/user/resetPassword/${resetToken}</a>`;
+
+  await mailer.send("Şifre Değiştirme", html);
+
+  res.status(200).json({
+    status: "success",
+  });
+});
+
+exports.resetPassword = catchAsync(async (req, res, next) => {
+  const userID = req.params.resetToken.slice(0, 24);
+  const timeStamp = req.params.resetToken.slice(25);
+
+  const user = await User.findById(userID).select("+password");
+
+  if (!user || Date.now() > timeStamp + 5 * 60 * 1000) {
+    return next(
+      new AppError(
+        "Yanlış linke girdiniz veya şifre yenileme süresi geçti",
+        404
+      )
+    );
+  }
+
+  user.password = req.body.password;
+  await user.save();
+
+  user.password = undefined;
+
+  res.status(201).json({
     status: "success",
     data: {
       user,
